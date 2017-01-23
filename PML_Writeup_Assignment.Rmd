@@ -1,0 +1,102 @@
+---
+title: "Practical Machine Learning Writeup"
+author: "Amol Nankar"
+date: "January 23, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information visit: http://groupware.les.inf.puc-rio.br/har (look forsection on the Weight Lifting Exercise Dataset).
+
+The training and test data for this project is downloaded from:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+## Project Goal
+
+The goal of this Practical Machine Learning project writeup is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. We may use any of the other variables to predict with. We should create a report describing how we built model, how we used cross validation, what we think the expected out of sample error is, and why we made the choices we did. We will also use our prediction model to predict 20 different test cases.
+
+## Data Cleansing and Manipulation
+
+Read the source csv files and load them into data variable
+```{r , echo=TRUE}
+library(caret)
+
+pmlTrain <- read.csv("pml-training.csv", header=T, na.strings=c("NA", "#DIV/0!"))
+pmlTest <- read.csv("pml-testing.csv", header=T, na.strings=c("NA", "#DIV/0!"))
+```
+
+There being some NAs in the data, we select columns which don't contain NAs. Also, if we looke at data, it contains descriptive data which are not sensor values we need to filter out that data too using below code.
+Variables related to time and user information are excluded for a total of 51 variables and 19622 class measurements. Same variables are mainteined in test data set for predicting 20 test cases provided.
+
+```{r , echo=TRUE}
+# exclude NA's from dataset
+noNApmlTrain<-pmlTrain[, apply(pmlTrain, 2, function(x) !any(is.na(x)))] 
+dim(noNApmlTrain)
+
+# variables with user information, time
+cleanpmlTrain<-noNApmlTrain[,-c(1:8)]
+dim(cleanpmlTrain)
+
+# 20 test cases provided clean info - Validation data set
+cleanpmltest<-pmlTest[,names(cleanpmlTrain[,-52])]
+dim(cleanpmltest)
+```
+
+## Data Slicing or Partitioning
+```{r , echo=TRUE}
+ # we are partitioning data to obtain a 75% training set and a 25% test set
+inTrain<-createDataPartition(y=cleanpmlTrain$classe, p=0.75,list=F)
+training<-cleanpmlTrain[inTrain,] 
+test<-cleanpmlTrain[-inTrain,] 
+
+#get dimensions for partitioned data
+dim(training)
+dim(test)
+```
+
+## Prediction Process
+Random forest trees were generated for training dataset. Then the generated algorithm was examnined under the partitioned training set to examine accuracy and estimated error of prediction. using 51 predictors for five classes using cross-validation at a 5-fold an accuracy of 99.2% with a 95% CI was achieved accompanied by a Kappa value of 0.99.
+
+```{r , echo=TRUE}
+set.seed(100)
+fitControl2<-trainControl(method="cv", number=5, allowParallel=T, verbose=T)
+rffit<-train(classe~.,data=training, method="rf", trControl=fitControl2, verbose=F)
+
+predrf<-predict(rffit, newdata=test)
+confusionMatrix(predrf, test$classe)
+
+
+pred20<-predict(rffit, newdata=cleanpmltest)
+# Output for the prediction of the 20 cases provided
+pred20
+```
+
+A boosting algorithm was also run to confirm and be able to compare predictions.boosting approach presented less accuracy (96%). However, when the predictions for the 20 test cases were compared match was same for both ran algorimths.
+
+```{r , echo=TRUE}
+fitControl2<-trainControl(method="cv", number=5, allowParallel=T, verbose=T)
+gmbfit<-train(classe~.,data=training, method="gbm", trControl=fitControl2, verbose=F)
+gmbfit$finalModel
+class(gmbfit)
+predgmb<-predict(gmbfit, newdata=test)
+confusionMatrix(predgmb, test$classe)
+predtrain<-predict(gmbfit, newdata=training)
+confusionMatrix(predtrain, training$classe)
+predtrain<-predict(gmbfit, newdata=training)
+confusionMatrix(predtrain, training$classe)
+```
+
+## Conclusion
+
+We can conclude that we accurately predicted the classification of 20 observations using a Random Forest algorithm trained on a subset of data using less than 20% of the covariates.
+
+The accuracy obtained (accuracy = 99.77%, and out-of-sample error = 0.23%) is obviously highly suspicious as it is never the case that machine learning algorithms are that accurate, and a mere 85% if often a good accuracy result.
+
+Either 6 participants for whom we have data were extraordinarily obedient (for more than 19 thousand observations, a strong performance! This however might be explained by the highly controlled conditions of the data collection), or additional testing needs to be performed on other different participants.
